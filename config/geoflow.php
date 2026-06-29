@@ -101,6 +101,10 @@ return [
     // 正文生成默认最大输出 token 数；当 AI 模型未单独配置 max_tokens 时使用此兜底值，
     // 避免依赖各服务商较小的默认上限（常见 4K）导致长文被截断。
     'content_max_tokens' => max(256, (int) env('GEOFLOW_CONTENT_MAX_TOKENS', 8192)),
+    // 单次 AI 模型 HTTP 调用失败后的最大重试次数（URL 智能采集等场景）
+    'ai_model_max_attempts' => max(1, (int) env('GEOFLOW_AI_MODEL_MAX_ATTEMPTS', 3)),
+    // AI HTTP 请求超时（秒），与 MarkdownContentWriterAgent 的 Timeout 保持一致
+    'ai_http_timeout_seconds' => max(30, (int) env('GEOFLOW_AI_HTTP_TIMEOUT_SECONDS', 240)),
 
     // 本地上传根目录（绝对路径）
     'upload_path' => env('GEOFLOW_UPLOAD_PATH', public_path('assets/images')),

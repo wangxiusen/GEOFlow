@@ -24,9 +24,13 @@ use Throwable;
 
 final class UrlImportProcessingService
 {
-    private const AI_ANALYSIS_MAX_ATTEMPTS = 3;
 
     public function __construct(private readonly ApiKeyCrypto $apiKeyCrypto) {}
+
+    private function aiModelMaxAttempts(): int
+    {
+        return max(1, (int) config('geoflow.ai_model_max_attempts', 3));
+    }
 
     /**
      * @return array{url:string,host:string}
@@ -425,12 +429,12 @@ final class UrlImportProcessingService
         $errors = [];
 
         foreach ($models as $model) {
-            for ($attempt = 1; $attempt <= self::AI_ANALYSIS_MAX_ATTEMPTS; $attempt++) {
+            for ($attempt = 1; $attempt <= $this->aiModelMaxAttempts(); $attempt++) {
                 try {
                     $this->log($job, 'info', __('admin.url_import.log.ai_model_attempt', [
                         'model' => $this->modelDisplayName($model),
                         'current' => $attempt,
-                        'max' => self::AI_ANALYSIS_MAX_ATTEMPTS,
+                        'max' => $this->aiModelMaxAttempts(),
                     ]), 'knowledge');
                     $runtime = $this->prepareAiRuntime($model);
 
@@ -478,6 +482,9 @@ final class UrlImportProcessingService
 
                     $this->updateStep($job, 'titles', 80);
                     $this->log($job, 'info', __('admin.url_import.log.titles_start'));
+                    $this->log($job, 'info', __('admin.url_import.log.titles_calling', [
+                        'seconds' => (int) config('geoflow.ai_http_timeout_seconds', 240),
+                    ]));
                     $titlePayload = $this->requestAiJson(
                         $runtime,
                         $this->buildTitlesSystemPrompt(),
@@ -509,11 +516,11 @@ final class UrlImportProcessingService
                     ];
                 } catch (Throwable $exception) {
                     $message = $this->normalizeAiErrorMessage($exception, $model);
-                    if ($attempt < self::AI_ANALYSIS_MAX_ATTEMPTS) {
+                    if ($attempt < $this->aiModelMaxAttempts()) {
                         $this->log($job, 'warning', __('admin.url_import.log.ai_model_retry', [
                             'model' => $this->modelDisplayName($model),
                             'current' => $attempt,
-                            'max' => self::AI_ANALYSIS_MAX_ATTEMPTS,
+                            'max' => $this->aiModelMaxAttempts(),
                             'message' => $message,
                         ]), (string) ($job->current_step ?: 'knowledge'));
 

@@ -90,6 +90,7 @@ class UrlImportController extends Controller
     public function run(int $jobId): JsonResponse
     {
         $job = UrlImportJob::query()->whereKey($jobId)->firstOrFail();
+        $job = $this->recoverStaleRunningJob($job);
 
         if (in_array($job->status, ['queued', 'failed'], true)) {
             try {
@@ -135,6 +136,7 @@ class UrlImportController extends Controller
     public function status(int $jobId): JsonResponse
     {
         $job = UrlImportJob::query()->whereKey($jobId)->firstOrFail();
+        $job = $this->recoverStaleRunningJob($job);
 
         return response()->json($this->statusPayload($job));
     }
@@ -235,6 +237,48 @@ class UrlImportController extends Controller
         exec($command, $output, $exitCode);
 
         return $exitCode === 0;
+    }
+
+    private function recoverStaleRunningJob(UrlImportJob $job): UrlImportJob
+    {
+        if ((string) $job->status !== 'running') {
+            return $job;
+        }
+
+        $lastLogAt = UrlImportJobLog::query()
+            ->where('job_id', (int) $job->id)
+            ->max('created_at');
+
+        $referenceAt = $lastLogAt ? \Illuminate\Support\Carbon::parse($lastLogAt) : ($job->updated_at ?? $job->started_at);
+        if (! $referenceAt) {
+            return $job;
+        }
+
+        $staleAfterSeconds = max(270, (int) config('geoflow.ai_http_timeout_seconds', 240) + 30);
+        if (now()->diffInSeconds($referenceAt) < $staleAfterSeconds) {
+            return $job;
+        }
+
+        $message = __('admin.url_import.error.stale_running', [
+            'step' => (string) $job->current_step,
+            'seconds' => $staleAfterSeconds,
+        ]);
+
+        $job->update([
+            'status' => 'failed',
+            'progress_percent' => max(1, (int) $job->progress_percent),
+            'error_message' => $message,
+            'finished_at' => now(),
+        ]);
+
+        UrlImportJobLog::query()->create([
+            'job_id' => (int) $job->id,
+            'step' => (string) ($job->current_step ?: 'running'),
+            'level' => 'error',
+            'message' => __('admin.url_import.log.failed', ['message' => $message]),
+        ]);
+
+        return $job->refresh();
     }
 
     /**

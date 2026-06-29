@@ -1,0 +1,13 @@
+services:
+  app:
+    env_file:
+      - ./.env
+  queue:
+    env_file:
+      - ./.env
+  scheduler:
+    env_file:
+      - ./.env
+  reverb:
+    env_file:
+      - ./.env
