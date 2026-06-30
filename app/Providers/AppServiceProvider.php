@@ -13,6 +13,7 @@ use App\Services\GeoFlow\TaskMonitoringQueryService;
 use App\Support\GeoFlow\OutboundHttpProxy;
 use App\View\Composers\SiteLayoutComposer;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -35,6 +36,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $appUrl = (string) config('app.url');
+        if (
+            config('app.env') === 'production'
+            && str_starts_with($appUrl, 'https://')
+        ) {
+            URL::forceScheme('https');
+        }
+
         Http::globalMiddleware(OutboundHttpProxy::middleware());
 
         View::composer(['site.layout', 'theme.*.layout'], SiteLayoutComposer::class);
